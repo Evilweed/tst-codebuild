@@ -1,0 +1,137 @@
+version: 0.2
+
+env:
+  parameter-store:
+    DEVELOPMENT_AWS_ACCESS_KEY_ID: 'DEVELOPMENT_AWS_ACCESS_KEY_ID'
+    DEVELOPMENT_AWS_SECRET_ACCESS_KEY: 'DEVELOPMENT_AWS_SECRET_ACCESS_KEY'
+    DEVELOPMENT_DEVISE_SECRET_KEY: 'DEVELOPMENT_DEVISE_SECRET_KEY'
+    DEVELOPMENT_SECRET_KEY_BASE: 'DEVELOPMENT_SECRET_KEY_BASE'
+    HONEYBADGER_API_KEY: 'HONEYBADGER_API_KEY'
+    HUBSPOT_API_KEY_LIVE: 'HUBSPOT_API_KEY_LIVE'
+    HUBSPOT_API_KEY_SANDBOX: 'HUBSPOT_API_KEY_SANDBOX'
+    INTEGRATION_AWS_ACCESS_KEY_ID: 'INTEGRATION_AWS_ACCESS_KEY_ID'
+    INTEGRATION_AWS_SECRET_ACCESS_KEY: 'INTEGRATION_AWS_SECRET_ACCESS_KEY'
+    INTEGRATION_DEVISE_SECRET_KEY: 'INTEGRATION_DEVISE_SECRET_KEY'
+    INTEGRATION_SECRET_KEY_BASE: 'INTEGRATION_SECRET_KEY_BASE'
+    SANDBOX_API_TOKEN: 'SANDBOX_API_TOKEN'
+    SANDBOX_BLUEPAY_SECRET_KEY: 'SANDBOX_BLUEPAY_SECRET_KEY'
+    SANDBOX_PAYPAL_CLIENT_ID: 'SANDBOX_PAYPAL_CLIENT_ID'
+    SANDBOX_PAYPAL_CLIENT_SECRET: 'SANDBOX_PAYPAL_CLIENT_SECRET'
+    SANDBOX_PAYPAL_MERCHANT_ID: 'SANDBOX_PAYPAL_MERCHANT_ID'
+    SANDBOX_PAYPAL_MODE: 'SANDBOX_PAYPAL_MODE'
+    SANDBOX_TRADOVATE_PASSWORD: 'SANDBOX_TRADOVATE_PASSWORD'
+    STAGING_AWS_ACCESS_KEY_ID: 'STAGING_AWS_ACCESS_KEY_ID'
+    STAGING_AWS_SECRET_ACCESS_KEY: 'STAGING_AWS_SECRET_ACCESS_KEY'
+    STAGING_DEVISE_SECRET_KEY: 'STAGING_DEVISE_SECRET_KEY'
+    STAGING_SECRET_KEY_BASE: 'STAGING_SECRET_KEY_BASE'
+    TEST_AWS_ACCESS_KEY_ID: 'TEST_AWS_ACCESS_KEY_ID'
+    TEST_AWS_SECRET_ACCESS_KEY: 'TEST_AWS_SECRET_ACCESS_KEY'
+    TEST_DEVISE_SECRET_KEY: 'TEST_DEVISE_SECRET_KEY'
+    TEST_SECRET_KEY_BASE: 'TEST_SECRET_KEY_BASE'
+
+phases:
+  install:
+    commands:
+      - echo Install started on `date`
+      # Shared memory for multiple Chromes
+      - sudo umount /dev/shm
+      - sudo mount -t tmpfs -o rw,nosuid,nodev,noexec,relatime,size=14G tmpfs /dev/shm
+      # Chrome
+      - echo "deb http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee -a /etc/apt/sources.list
+      - wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+      - sudo sh -c 'echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+      - sudo apt-get update
+      - sudo apt-get install -y google-chrome-stable
+      - sudo apt-get install -f
+      # Ruby
+      - sudo apt-get -y install software-properties-common python-software-properties
+      - sudo apt-add-repository ppa:brightbox/ruby-ng
+      - sudo apt-get update
+      - sudo apt-get install build-essential libssl-dev
+      - sudo apt-get install -y curl gnupg ruby2.2 ruby2.2-dev
+      - gem install bundler --no-rdoc --no-ri
+      - bundle install
+      # Docker
+      - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+      - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+      - sudo apt-get install apt-transport-https
+      - wget -q https://www.postgresql.org/media/keys/ACCC4CF8.asc -O - | sudo apt-key add -
+      - sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" >> /etc/apt/sources.list.d/pgdg.list'
+      - sudo apt-get update
+      - apt-cache policy docker-ce
+      - sudo apt-get install -y docker-ce=17.09.0~ce-0~ubuntu
+      # Postgres
+      - sudo apt-get install -y postgresql postgresql-contrib
+      - truncate -s 0 /etc/postgresql/10/main/pg_hba.conf
+      - echo "host all all ::1/128 trust" >> /etc/postgresql/10/main/pg_hba.conf
+      - echo "local   all             all                         trust" >> /etc/postgresql/10/main/pg_hba.conf
+      - echo "host all  all    0.0.0.0/0  trust" >> /etc/postgresql/10/main/pg_hba.conf
+      - echo "listen_addresses='*'" >> /etc/postgresql/10/main/postgresql.conf
+      - /etc/init.d/postgresql start
+      - psql -h localhost -U postgres --command "CREATE ROLE topsteptrader WITH login SUPERUSER ENCRYPTED PASSWORD 'topsteptrader';"
+      - psql -h localhost -U postgres --command "CREATE DATABASE topsteptrader_development WITH OWNER topsteptrader;"
+      - psql -h localhost -U postgres --command "CREATE DATABASE topsteptrader_test WITH OWNER topsteptrader;"
+#      - echo Test build stopping...
+#      - aws codebuild stop-build --id $CODEBUILD_BUILD_ID
+#      - curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash
+#      - apt-get install nodejs
+      # Node versions
+      - export NODE_VERSION_FOR_APP=v6.9.1
+      - export NODE_VERSION_FOR_PROTRACTOR=v8.9.1
+      - export NVM_DIR=/home/node/.nvm
+      - curl https://raw.githubusercontent.com/creationix/nvm/v0.33.1/install.sh | bash
+      - . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION_FOR_APP && nvm alias default $NODE_VERSION_FOR_APP
+      - . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION_FOR_PROTRACTOR
+      - . $NVM_DIR/nvm.sh && nvm ls
+      # Yarn dependencies
+      - npm install -g yarn
+      - cd app.js && yarn install && cd ..
+      - npm install
+      # Java
+      - sudo add-apt-repository ppa:openjdk-r/ppa
+      - apt-get update
+      - apt-get install -y openjdk-8-jdk
+      - apt-get install -y ant
+      - apt-get clean
+      - apt-get update
+      - apt-get install ca-certificates-java
+      - apt-get clean
+      - update-ca-certificates -f
+      - export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+      - echo $JAVA_HOME
+#      - apt-get install -y default-jre
+#      - export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
+      # Protractor / Chrome needs those
+      - export DISPLAY=:0
+      - export DBUS_SESSION_BUS_ADDRESS=/dev/null
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - sudo service docker start
+      - docker version
+      - cp deploy/application.yml config/application.yml
+      - cp deploy/database.yml config/database.yml
+#      - rake parallel:setup
+#      - rake db:create db:migrate
+#      - rake parallel:spec
+      - echo Using node version `node -v`
+      - cd app.js && npm run webdriver:update && cd ..
+      - RAILS_HOST='' RAILS_ENV=integration rake js:release
+      - RAILS_ENV=integration rake js:run:karma
+      - docker build -t tst_app -f Dockerfile.ci .
+      - docker pull postgres
+      - google-chrome -version
+#      - . $NVM_DIR/nvm.sh && nvm use $NODE_VERSION_FOR_PROTRACTOR
+      - RAILS_ENV=integration rake js:ci:e2e
+      - . $NVM_DIR/nvm.sh && nvm use $NODE_VERSION_FOR_APP
+#      - RAILS_ENV=staging rake assets:clean assets:clobber assets:precompile
+  post_build:
+    commands:
+      - echo Cleaning
+      - rm -rf app.js/node_modules
+      - echo Build completed on `date`
+
+artifacts:
+  files:
+    - '**/*'
