@@ -79,6 +79,84 @@ RUN set -x \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+# Java
+RUN apt-get update \
+    && apt-get install -y software-properties-common \
+    && add-apt-repository -y ppa:openjdk-r/ppa \
+    && apt-get update \
+    && apt-get install -y openjdk-8-jdk \
+    && apt-get install -y ant \
+    && apt-get clean \
+    && apt-get update \
+    && apt-get install ca-certificates-java \
+    && apt-get clean \
+    && update-ca-certificates -f \
+    && export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+
+# Ruby
+RUN apt-get update \
+    && apt-get install -y software-properties-common \
+    && sudo apt-get -y install software-properties-common python-software-properties \
+    && sudo apt-add-repository ppa:brightbox/ruby-ng \
+    && sudo apt-get update \
+    && sudo apt-get install build-essential libssl-dev \
+    && sudo apt-get install -y curl gnupg ruby2.2 ruby2.2-dev \
+    && gem install bundler --no-rdoc --no-ri
+
+# Postgres
+RUN apt-get update \
+    && apt-get install -y software-properties-common \
+    && wget -q https://www.postgresql.org/media/keys/ACCC4CF8.asc -O - | sudo apt-key add - \
+    && sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" >> /etc/apt/sources.list.d/pgdg.list' \
+    && apt-get update \
+    && sudo apt-get install -y postgresql postgresql-contrib \
+    && truncate -s 0 /etc/postgresql/10/main/pg_hba.conf \
+    && echo "host all all ::1/128 trust" >> /etc/postgresql/10/main/pg_hba.conf \
+    && echo "local   all             all                         trust" >> /etc/postgresql/10/main/pg_hba.conf \
+    && echo "host all  all    0.0.0.0/0  trust" >> /etc/postgresql/10/main/pg_hba.conf \
+    && echo "listen_addresses='*'" >> /etc/postgresql/10/main/postgresql.conf
+
+RUN /etc/init.d/postgresql start \
+    && psql -h localhost -U postgres --command "CREATE ROLE topsteptrader WITH login SUPERUSER ENCRYPTED PASSWORD 'topsteptrader';" \
+    && psql -h localhost -U postgres --command "CREATE DATABASE topsteptrader_development WITH OWNER topsteptrader;" \
+    && psql -h localhost -U postgres --command "CREATE DATABASE topsteptrader_test WITH OWNER topsteptrader;"
+
+# Node / npm
+ENV NODE_VERSION_FOR_APP=v6.9.1 \
+    NODE_VERSION_FOR_PROTRACTOR=v8.9.1 \
+    NVM_DIR=/home/node/.nvm
+
+RUN curl https://raw.githubusercontent.com/creationix/nvm/v0.33.1/install.sh | bash
+
+RUN . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION_FOR_APP && nvm alias default $NODE_VERSION_FOR_APP \
+    . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION_FOR_PROTRACTOR \
+    . $NVM_DIR/nvm.sh && nvm ls
+
+# Yarn
+RUN . $NVM_DIR/nvm.sh && npm install -g yarn
+
+# docker-compose
+RUN curl -L https://github.com/docker/compose/releases/download/1.17.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+RUN chmod +x /usr/local/bin/docker-compose
+
+## docker
+#RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+#RUN sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+#RUN sudo apt-get install apt-transport-https \
+#    && sudo apt-get update \
+#    && apt-cache policy docker-ce \
+#    && sudo apt-get install -y docker-ce=17.09.0~ce-0~ubuntu
+
+# Chrome
+RUN echo "deb http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee -a /etc/apt/sources.list
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+RUN sudo sh -c 'echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
+    && sudo apt-get update \
+    && sudo apt-get install -y google-chrome-stable \
+    && sudo apt-get install -f
+
+
 VOLUME /var/lib/docker
 
 ENTRYPOINT ["dockerd-entrypoint.sh"]
+#
